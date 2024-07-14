@@ -1,8 +1,10 @@
+use std::sync::atomic::AtomicBool;
+use std::sync::atomic::Ordering;
+
 pub const HLL_P: usize = 14;
 pub const HLL_Q: usize = 64 - HLL_P;
 
 pub const HLL_BITS: usize = 6; // ceil(log2(HLL_Q))
-pub const HLL_BITS_MASK: u32 = (1 << HLL_BITS) - 1;
 
 pub const HLL_REGISTERS: usize = 1 << HLL_P;
 
@@ -11,6 +13,7 @@ pub const HLL_HIST_LEN: usize = 1 << HLL_BITS;
 #[allow(clippy::excessive_precision)]
 pub const HLL_ALPHA_INF: f64 = 0.721_347_520_444_481_703_680;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
 pub enum HllRepr {
     Dense = 0,
@@ -65,4 +68,14 @@ pub fn hll_sigma(mut x: f64) -> f64 {
         }
     }
     z
+}
+
+static SIMD: AtomicBool = AtomicBool::new(true);
+
+pub fn set_simd(enabled: bool) {
+    SIMD.store(enabled, Ordering::Relaxed);
+}
+
+pub fn is_simd_enabled() -> bool {
+    SIMD.load(Ordering::Relaxed)
 }
