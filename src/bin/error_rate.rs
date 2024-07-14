@@ -1,8 +1,18 @@
 use redis_hyperloglog::HyperLogLog;
 
+use clap::Parser;
 use rand::seq::SliceRandom;
 use rayon::iter::IntoParallelIterator;
 use rayon::iter::ParallelIterator;
+
+#[derive(clap::Parser, Debug)]
+struct Args {
+    #[clap(short, default_value = "10000000")]
+    n: usize,
+
+    #[clap(short, long, default_value = "16")]
+    rounds: usize,
+}
 
 #[allow(clippy::cast_precision_loss, clippy::cast_lossless, clippy::needless_range_loop)]
 fn run_error_rate(n: usize) -> (f64, f64) {
@@ -34,12 +44,12 @@ fn run_error_rate(n: usize) -> (f64, f64) {
 }
 
 fn main() {
-    let n: usize = 1_0000_0000;
-    let rounds: usize = 16;
+    let args = Args::parse();
+    let Args { n, rounds } = args;
 
     let results = (1..=rounds).into_par_iter().map(|_| run_error_rate(n)).collect::<Vec<_>>();
 
-    println!("n: {n}");
+    println!("{args:?}");
     for round in 1..=rounds {
         let (max_err, avg_err) = results[round - 1];
         println!("round: {round:>2}, max_err: {max_err:.4}%, avg_err: {avg_err:.4}%");
