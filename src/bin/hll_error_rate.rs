@@ -115,7 +115,7 @@ fn main() -> io::Result<()> {
     {
         let last_errors = Array::from_iter(total_results.iter().map(|&(_, _, last_err)| last_err));
         let sample_var = last_errors.var(1.0);
-        println!("sample variance: {sample_var:.4}");
+        println!("sample variance: {sample_var}");
     }
 
     println!("done");
