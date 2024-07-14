@@ -13,6 +13,8 @@ mod array;
 mod config;
 mod dense;
 mod hash;
+#[cfg(test)]
+mod tests;
 
 pub use self::config::{is_simd_enabled, set_simd};
 
