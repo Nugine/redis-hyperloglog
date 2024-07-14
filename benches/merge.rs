@@ -4,6 +4,9 @@ use criterion::{black_box, criterion_group, criterion_main};
 use criterion::{BenchmarkId, Criterion};
 
 pub fn bench_merge(c: &mut Criterion) {
+    dbg!(is_x86_feature_detected!("avx512f"));
+    dbg!(is_x86_feature_detected!("avx512bw"));
+
     let mut group = c.benchmark_group("merge");
 
     let nums = [2, 3, 7, 30, 60, 90];
@@ -17,6 +20,7 @@ pub fn bench_merge(c: &mut Criterion) {
         }
 
         let mut dst = HyperLogLog::new();
+        dst.insert(&n.to_be_bytes());
 
         redis_hyperloglog::set_simd(true);
         group.bench_with_input(BenchmarkId::new("merge-simd", n), &n, |b, _| {

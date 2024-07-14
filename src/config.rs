@@ -73,9 +73,9 @@ pub fn hll_sigma(mut x: f64) -> f64 {
 static SIMD: AtomicBool = AtomicBool::new(true);
 
 pub fn set_simd(enabled: bool) {
-    SIMD.store(enabled, Ordering::Relaxed);
+    SIMD.store(enabled, Ordering::SeqCst);
 }
 
 pub fn is_simd_enabled() -> bool {
-    SIMD.load(Ordering::Relaxed)
+    SIMD.load(Ordering::SeqCst)
 }
