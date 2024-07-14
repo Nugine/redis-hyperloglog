@@ -1,12 +1,12 @@
 use redis_hyperloglog::HyperLogLog;
 
+use std::collections::HashSet;
 use std::fs;
 use std::io;
 
 use clap::Parser;
 use indicatif::ProgressStyle;
 use ndarray::Array;
-use rand::seq::SliceRandom;
 use rayon::iter::IntoParallelIterator;
 use rayon::iter::ParallelIterator;
 
@@ -25,13 +25,23 @@ struct Args {
     save: String,
 }
 
+#[allow(clippy::needless_range_loop)]
+fn gen_rand_seq(n: usize) -> Vec<u64> {
+    let mut set = HashSet::with_capacity(n);
+    let mut vals = vec![0u64; n];
+    for i in 0..n {
+        let mut val = rand::random::<u64>();
+        while !set.insert(val) {
+            val = rand::random::<u64>();
+        }
+        vals[i] = val;
+    }
+    vals
+}
+
 #[allow(clippy::cast_precision_loss, clippy::cast_lossless, clippy::needless_range_loop)]
 fn run_error_rate(n: usize) -> (f64, f64, f64) {
-    let mut vals = vec![0u64; n + 1];
-    for i in 1..=n {
-        vals[i] = i as u64;
-    }
-    vals.as_mut_slice().shuffle(&mut rand::thread_rng());
+    let vals = gen_rand_seq(n);
 
     let mut hll = HyperLogLog::new();
     assert_eq!(hll.count(), 0);
@@ -69,7 +79,9 @@ fn main() -> io::Result<()> {
     let mut total_results = Vec::with_capacity(rounds);
 
     let pbar = indicatif::ProgressBar::new(rounds as u64);
-    pbar.set_style(ProgressStyle::with_template("[{elapsed_precise}][{eta_precise}] {bar:40.cyan/blue} {pos:>7}/{len:7} {msg}").unwrap());
+    pbar.set_style(
+        ProgressStyle::with_template("[{elapsed_precise}][{eta_precise}] {bar:40.cyan/blue} {pos:>7}/{len:7} {msg}").unwrap(),
+    );
 
     let mut r = 0;
     while r < rounds {
