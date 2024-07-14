@@ -50,7 +50,7 @@ fn run_error_rate(n: usize) -> (f64, f64, f64) {
     let mut sum_err_abs: f64 = 0.0;
 
     for i in 1..=n {
-        hll.insert(&vals[i].to_be_bytes());
+        hll.insert(&vals[i - 1].to_be_bytes());
         let count = hll.count();
 
         let err = (count as f64 - f64::from(i as u32)) / f64::from(i as u32);
