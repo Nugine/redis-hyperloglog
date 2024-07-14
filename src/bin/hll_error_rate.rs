@@ -12,7 +12,7 @@ use rayon::iter::ParallelIterator;
 
 #[derive(clap::Parser, Debug)]
 struct Args {
-    #[clap(short, default_value = "100000000")]
+    #[clap(short, default_value = "10000000")]
     n: usize,
 
     #[clap(short, long, default_value = "16")]
@@ -114,7 +114,7 @@ fn main() -> io::Result<()> {
 
     {
         let last_errors = Array::from_iter(total_results.iter().map(|&(_, _, last_err)| last_err));
-        let sample_var = last_errors.var(1.0);
+        let sample_var = (&last_errors * &last_errors).mean().unwrap();
         println!("sample variance: {sample_var}");
     }
 
