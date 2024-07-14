@@ -1,11 +1,13 @@
 #![deny(clippy::all, clippy::pedantic)]
-#![allow(clippy::inline_always, clippy::module_name_repetitions)]
+#![allow(clippy::inline_always, clippy::module_name_repetitions, clippy::wildcard_imports)]
 
 mod array;
 mod config;
+mod dense;
 mod hash;
 
-use self::config::HllEncoding;
+use self::config::HllRepr;
+use self::dense::HllDense;
 
 #[repr(transparent)]
 pub struct HyperLogLog {
@@ -15,11 +17,14 @@ pub struct HyperLogLog {
 impl HyperLogLog {
     #[must_use]
     pub fn new() -> Self {
-        todo!()
+        let ptr = HllDense::create().cast();
+        Self { ptr }
     }
 
     pub fn clear(&mut self) {
-        todo!()
+        match self.repr() {
+            HllRepr::Dense => unsafe { HllDense::clear(&mut *self.ptr.cast()) },
+        }
     }
 
     pub fn insert(&mut self, key: &[u8]) -> bool {
@@ -36,14 +41,16 @@ impl HyperLogLog {
 }
 
 impl HyperLogLog {
-    fn encoding(&self) -> HllEncoding {
-        unsafe { self.ptr.cast::<HllEncoding>().read() }
+    fn repr(&self) -> HllRepr {
+        unsafe { self.ptr.cast::<HllRepr>().read() }
     }
 }
 
 impl Drop for HyperLogLog {
     fn drop(&mut self) {
-        todo!()
+        match self.repr() {
+            HllRepr::Dense => unsafe { HllDense::destroy(self.ptr.cast()) },
+        }
     }
 }
 

@@ -75,3 +75,23 @@ impl<T, const N: usize> IndexMut<u8> for UnsafeArray<T, N> {
         unsafe { self.data.get_unchecked_mut(index as usize) }
     }
 }
+
+#[allow(clippy::cast_sign_loss)]
+impl<T, const N: usize> Index<i32> for UnsafeArray<T, N> {
+    type Output = T;
+
+    fn index(&self, index: i32) -> &Self::Output {
+        debug_assert!(0 <= index);
+        debug_assert!((index as usize) < N);
+        unsafe { self.data.get_unchecked(index as usize) }
+    }
+}
+
+#[allow(clippy::cast_sign_loss)]
+impl<T, const N: usize> IndexMut<i32> for UnsafeArray<T, N> {
+    fn index_mut(&mut self, index: i32) -> &mut Self::Output {
+        debug_assert!(0 <= index);
+        debug_assert!((index as usize) < N);
+        unsafe { self.data.get_unchecked_mut(index as usize) }
+    }
+}
