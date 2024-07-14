@@ -1,23 +1,24 @@
+use redis_hyperloglog::HyperLogLog;
+
 use std::fs;
 use std::io;
 
-use ndarray::Array;
-use redis_hyperloglog::HyperLogLog;
-
 use clap::Parser;
+use indicatif::ProgressStyle;
+use ndarray::Array;
 use rand::seq::SliceRandom;
 use rayon::iter::IntoParallelIterator;
 use rayon::iter::ParallelIterator;
 
 #[derive(clap::Parser, Debug)]
 struct Args {
-    #[clap(short, default_value = "10000000")]
+    #[clap(short, default_value = "100000000")]
     n: usize,
 
     #[clap(short, long, default_value = "16")]
     rounds: usize,
 
-    #[clap(short, long, default_value = "128")]
+    #[clap(short, long, default_value = "16")]
     batch_size: usize,
 
     #[clap(long, default_value = "results.json")]
@@ -68,6 +69,8 @@ fn main() -> io::Result<()> {
     let mut total_results = Vec::with_capacity(rounds);
 
     let pbar = indicatif::ProgressBar::new(rounds as u64);
+    pbar.set_style(ProgressStyle::with_template("[{elapsed_precise}][{eta_precise}] {bar:40.cyan/blue} {pos:>7}/{len:7} {msg}").unwrap());
+
     let mut r = 0;
     while r < rounds {
         let batch = (rounds - r).min(batch_size);
@@ -77,13 +80,13 @@ fn main() -> io::Result<()> {
         for i in 0..batch {
             let round = r + i + 1;
             let (max_err, avg_err, last_err) = results[i];
-            println!(
+            pbar.println(format!(
                 "round: {:>2}, max_err: {:.4}%, avg_err: {:.4}%, last_err: {:>6.4}%",
                 round,
                 max_err * 100.0,
                 avg_err * 100.0,
                 last_err * 100.0
-            );
+            ));
         }
 
         total_results.extend(results);
