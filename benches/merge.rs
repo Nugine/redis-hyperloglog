@@ -1,6 +1,6 @@
 use redis_hyperloglog::HyperLogLog;
 
-use criterion::{black_box, criterion_group, criterion_main};
+use criterion::{black_box, criterion_group, criterion_main, AxisScale, PlotConfiguration};
 use criterion::{BenchmarkId, Criterion};
 
 pub fn bench_merge(c: &mut Criterion) {
@@ -8,6 +8,7 @@ pub fn bench_merge(c: &mut Criterion) {
     dbg!(is_x86_feature_detected!("avx512bw"));
 
     let mut group = c.benchmark_group("merge");
+    group.plot_config(PlotConfiguration::default().summary_scale(AxisScale::Logarithmic));
 
     let nums = [2, 3, 7, 30, 60, 90];
 
