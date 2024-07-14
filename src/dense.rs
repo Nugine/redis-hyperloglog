@@ -3,6 +3,8 @@ use std::alloc::dealloc;
 use std::alloc::handle_alloc_error;
 use std::alloc::Layout;
 use std::ptr;
+use std::sync::atomic::AtomicU64;
+use std::sync::atomic::Ordering;
 
 use crate::array::UnsafeArray;
 use crate::config::*;
@@ -17,7 +19,7 @@ pub struct HllDense {
     repr: HllRepr,
     cmin: u8,
     _pad: [u8; 6],
-    card: u64,
+    card: AtomicU64,
     hist: UnsafeArray<u16, HLL_HIST_LEN>,
     regs: UnsafeArray<u8, DENSE_REGISTERS_LEN>,
 }
@@ -38,7 +40,7 @@ impl HllDense {
     unsafe fn init_from_zeroed(this: *mut Self) {
         (*this).repr = HllRepr::Dense;
         (*this).cmin = 0;
-        (*this).card = 0;
+        (*this).card = const { AtomicU64::new(0) };
         (*this).hist[0] = HLL_REGISTERS as u16;
         // ...zero-initialized
     }
@@ -83,7 +85,7 @@ impl HllDense {
                 self.cmin = count_min;
             }
 
-            self.card = u64::MAX;
+            *self.card.get_mut() = u64::MAX;
         }
 
         true
@@ -95,9 +97,10 @@ impl HllDense {
         clippy::cast_sign_loss,
         clippy::cast_possible_truncation
     )]
-    pub fn count(&mut self) -> u64 {
-        if self.card != u64::MAX {
-            return self.card;
+    pub fn count(&self) -> u64 {
+        let card = self.card.load(Ordering::Relaxed);
+        if card != u64::MAX {
+            return card;
         }
 
         let m = HLL_REGISTERS as f64;
@@ -121,17 +124,17 @@ impl HllDense {
         z += m * hll_sigma(h0 / m);
 
         let e = HLL_ALPHA_INF * m * m / z;
-        let e = e.round() as u64;
+        let ans = e.round() as u64;
 
-        self.card = e;
-        e
+        self.card.store(ans, Ordering::Relaxed);
+        ans
     }
 
     pub fn merge(&mut self, sources: &[&&Self]) {
         unsafe {
             let mut reg_raw = [0; HLL_REGISTERS];
 
-            if self.card != 0 {
+            if *self.card.get_mut() != 0 {
                 merge_max(reg_raw.as_mut_ptr(), self.regs.as_ptr());
             }
             for &&src in sources {
@@ -146,7 +149,7 @@ impl HllDense {
             }
             self.cmin = count_min;
 
-            self.card = u64::MAX;
+            *self.card.get_mut() = u64::MAX;
 
             compress(self.regs.as_mut_ptr(), reg_raw.as_ptr());
         }

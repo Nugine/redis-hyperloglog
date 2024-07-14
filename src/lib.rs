@@ -46,9 +46,10 @@ impl HyperLogLog {
         }
     }
 
-    pub fn count(&mut self) -> u64 {
+    #[must_use]
+    pub fn count(&self) -> u64 {
         match self.repr() {
-            HllRepr::Dense => unsafe { HllDense::count(&mut *self.ptr.cast()) },
+            HllRepr::Dense => unsafe { HllDense::count(&*self.ptr.cast()) },
         }
     }
 
