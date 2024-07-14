@@ -1,6 +1,7 @@
 use std::fs;
 use std::io;
 
+use ndarray::Array;
 use redis_hyperloglog::HyperLogLog;
 
 use clap::Parser;
@@ -42,7 +43,6 @@ fn run_error_rate(n: usize) -> (f64, f64, f64) {
         let count = hll.count();
 
         let err = (count as f64 - f64::from(i as u32)) / f64::from(i as u32);
-        let err = err * 100.;
 
         max_err_abs = max_err_abs.max(err.abs());
         sum_err_abs += err.abs();
@@ -54,6 +54,7 @@ fn run_error_rate(n: usize) -> (f64, f64, f64) {
     (max_err_abs, avg_err, last_err)
 }
 
+#[allow(clippy::needless_range_loop)]
 fn main() -> io::Result<()> {
     let args = Args::parse();
     let Args {
@@ -64,18 +65,25 @@ fn main() -> io::Result<()> {
     } = args;
     println!("{args:?}");
 
-    let pbar = indicatif::ProgressBar::new(rounds as u64);
     let mut total_results = Vec::with_capacity(rounds);
 
+    let pbar = indicatif::ProgressBar::new(rounds as u64);
     let mut r = 0;
     while r < rounds {
         let batch = (rounds - r).min(batch_size);
 
-        let results = (1..=batch).into_par_iter().map(|_| run_error_rate(n)).collect::<Vec<_>>();
+        let results = (0..batch).into_par_iter().map(|_| run_error_rate(n)).collect::<Vec<_>>();
 
-        for round in (r + 1)..=(r + batch) {
-            let (max_err, avg_err, last_err) = results[round - 1];
-            println!("round: {round:>2}, max_err: {max_err:.4}%, avg_err: {avg_err:.4}%, last_err: {last_err:>6.4}%");
+        for i in 0..batch {
+            let round = r + i + 1;
+            let (max_err, avg_err, last_err) = results[i];
+            println!(
+                "round: {:>2}, max_err: {:.4}%, avg_err: {:.4}%, last_err: {:>6.4}%",
+                round,
+                max_err * 100.0,
+                avg_err * 100.0,
+                last_err * 100.0
+            );
         }
 
         total_results.extend(results);
@@ -88,6 +96,13 @@ fn main() -> io::Result<()> {
         let mut file = fs::File::create(save)?;
         serde_json::to_writer(&mut file, &total_results)?;
     }
+
+    {
+        let last_errors = Array::from_iter(total_results.iter().map(|&(_, _, last_err)| last_err));
+        let sample_var = last_errors.var(1.0);
+        println!("sample variance: {sample_var:.4}");
+    }
+
     println!("done");
 
     Ok(())
