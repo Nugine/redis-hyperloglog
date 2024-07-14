@@ -130,14 +130,14 @@ impl HllDense {
         ans
     }
 
-    pub fn merge(&mut self, sources: &[&&Self]) {
+    pub fn merge(&mut self, sources: &[&Self]) {
         unsafe {
             let mut reg_raw = [0; HLL_REGISTERS];
 
             if *self.card.get_mut() != 0 {
                 merge_max(reg_raw.as_mut_ptr(), self.regs.as_ptr());
             }
-            for &&src in sources {
+            for &src in sources {
                 merge_max(reg_raw.as_mut_ptr(), src.regs.as_ptr());
             }
 

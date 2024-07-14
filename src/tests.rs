@@ -21,7 +21,7 @@ fn merge3() {
         }
 
         let mut hll_merged = HyperLogLog::new();
-        hll_merged.merge(&[&hll1, &hll2, &hll3]);
+        hll_merged.merge(&[hll1, hll2, hll3]);
 
         let count = hll_merged.count();
         let truth = n * 3;

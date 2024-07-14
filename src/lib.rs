@@ -55,12 +55,12 @@ impl HyperLogLog {
         }
     }
 
-    pub fn merge(&mut self, sources: &[&Self]) {
+    pub fn merge(&mut self, sources: &[Self]) {
         assert!(self.repr() == HllRepr::Dense);
         for src in sources {
             assert!(src.repr() == HllRepr::Dense);
         }
-        let sources: &[&&HllDense] = unsafe { slice_cast(sources) };
+        let sources: &[&HllDense] = unsafe { slice_cast(sources) };
         unsafe { HllDense::merge(&mut *self.ptr.cast(), sources) }
     }
 }
