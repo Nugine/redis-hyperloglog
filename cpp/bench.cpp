@@ -197,6 +197,169 @@ void compress_avx512(uint8_t *reg_dense, const uint8_t *reg_raw) {
     }
 }
 
+#define HLL_DENSE_REG_LEN (HLL_REGISTERS * HLL_BITS / 8)
+
+void histogram_base_1(const uint8_t *reg_dense, int *hist) {
+    const uint8_t *r = reg_dense;
+
+    unsigned int r0, r1, r2, r3;
+    for (int j = 0; j < 4096; ++j) {
+        r0 = r[0] & 63;
+        r1 = (r[0] >> 6 | r[1] << 2) & 63;
+        r2 = (r[1] >> 4 | r[2] << 4) & 63;
+        r3 = (r[2] >> 2) & 63;
+
+        hist[r0]++;
+        hist[r1]++;
+        hist[r2]++;
+        hist[r3]++;
+
+        r += 3;
+    }
+}
+
+void histogram_base_2(const uint8_t *reg_dense, int *hist) {
+    const uint8_t *r = reg_dense, *end = reg_dense + HLL_DENSE_REG_LEN;
+
+    unsigned int r0, r1, r2, r3;
+    for (; r < end; r += 3) {
+        r0 = r[0] & 63;
+        r1 = (r[0] >> 6 | r[1] << 2) & 63;
+        r2 = (r[1] >> 4 | r[2] << 4) & 63;
+        r3 = (r[2] >> 2) & 63;
+
+        hist[r0]++;
+        hist[r1]++;
+        hist[r2]++;
+        hist[r3]++;
+    }
+}
+
+void histogram_unroll(const uint8_t *reg_dense, int *hist) {
+    const uint8_t *r = reg_dense;
+
+    unsigned int r0, r1, r2, r3, r4, r5, r6, r7;
+    unsigned int r8, r9, r10, r11, r12, r13, r14, r15;
+    for (int j = 0; j < 1024; ++j) {
+        r0 = r[0] & 63;
+        r1 = (r[0] >> 6 | r[1] << 2) & 63;
+        r2 = (r[1] >> 4 | r[2] << 4) & 63;
+        r3 = (r[2] >> 2) & 63;
+        r4 = r[3] & 63;
+        r5 = (r[3] >> 6 | r[4] << 2) & 63;
+        r6 = (r[4] >> 4 | r[5] << 4) & 63;
+        r7 = (r[5] >> 2) & 63;
+        r8 = r[6] & 63;
+        r9 = (r[6] >> 6 | r[7] << 2) & 63;
+        r10 = (r[7] >> 4 | r[8] << 4) & 63;
+        r11 = (r[8] >> 2) & 63;
+        r12 = r[9] & 63;
+        r13 = (r[9] >> 6 | r[10] << 2) & 63;
+        r14 = (r[10] >> 4 | r[11] << 4) & 63;
+        r15 = (r[11] >> 2) & 63;
+
+        hist[r0]++;
+        hist[r1]++;
+        hist[r2]++;
+        hist[r3]++;
+        hist[r4]++;
+        hist[r5]++;
+        hist[r6]++;
+        hist[r7]++;
+        hist[r8]++;
+        hist[r9]++;
+        hist[r10]++;
+        hist[r11]++;
+        hist[r12]++;
+        hist[r13]++;
+        hist[r14]++;
+        hist[r15]++;
+
+        r += 12;
+    }
+}
+
+/**
+load
+{????|AAAB|BBCC|CDDD|EEEF|FFGG|GHHH|????}
+
+shuffle
+{bbaaaaaa|ccccbbbb|ddddddcc|00000000} x8
+
+and -> 00aaaaaa
+and, slli -> 00bbbbbb
+and, slli -> 00cccccc
+and, slli -> 00dddddd
+or,or,or -> {00aaaaaa|00bbbbbb|00cccccc|00dddddd} x8
+ */
+const __m256i avx2_shuffle = _mm256_setr_epi8( //
+    4, 5, 6, 0x80,                             //
+    7, 8, 9, 0x80,                             //
+    10, 11, 12, 0x80,                          //
+    13, 14, 15, 0x80,                          //
+    0, 1, 2, 0x80,                             //
+    3, 4, 5, 0x80,                             //
+    6, 7, 8, 0x80,                             //
+    9, 10, 11, 0x80                            //
+);
+void histogram_avx2_1(const uint8_t *reg_dense, int *hist) {
+    const uint8_t *r = reg_dense - 4;
+    for (int j = 0; j < 512; ++j) {
+        __m256i x0 = _mm256_loadu_si256((__m256i *)r);
+        __m256i x1 = _mm256_shuffle_epi8(x0, avx2_shuffle);
+
+#ifdef DEBUG
+        uint8_t dbg[32];
+        _mm256_storeu_si256((__m256i *)dbg, x1);
+        int k = 4;
+        for (int i = 0; i < 8; ++i) {
+            // fprintf(stderr, "i = %d, k = %d\n", i, k);
+            assert(dbg[i * 4 + 0] == r[k++]);
+            assert(dbg[i * 4 + 1] == r[k++]);
+            assert(dbg[i * 4 + 2] == r[k++]);
+            assert(dbg[i * 4 + 3] == 0);
+        }
+#endif
+
+        __m256i a1, a2, a3, a4;
+        a1 = _mm256_and_si256(x1, _mm256_set1_epi32(0x0000003f));
+        a2 = _mm256_and_si256(x1, _mm256_set1_epi32(0x00000fc0));
+        a3 = _mm256_and_si256(x1, _mm256_set1_epi32(0x0003f000));
+        a4 = _mm256_and_si256(x1, _mm256_set1_epi32(0x00fc0000));
+
+        a2 = _mm256_slli_epi32(a2, 2);
+        a3 = _mm256_slli_epi32(a3, 4);
+        a4 = _mm256_slli_epi32(a4, 6);
+
+        __m256i y, y1, y2;
+        y1 = _mm256_or_si256(a1, a2);
+        y2 = _mm256_or_si256(a3, a4);
+        y = _mm256_or_si256(y1, y2);
+
+        uint8_t *t = (uint8_t *)(&y);
+
+#ifdef DEBUG
+        for (int i = 0; i < 32; ++i) {
+            assert(t[i] < 64);
+            uint8_t val;
+            HLL_DENSE_GET_REGISTER(val, reg_dense, (j * 32 + i));
+            assert(t[i] == val);
+        }
+#endif
+
+        hist[t[0]]++, hist[t[1]]++, hist[t[2]]++, hist[t[3]]++;
+        hist[t[4]]++, hist[t[5]]++, hist[t[6]]++, hist[t[7]]++;
+        hist[t[8]]++, hist[t[9]]++, hist[t[10]]++, hist[t[11]]++;
+        hist[t[12]]++, hist[t[13]]++, hist[t[14]]++, hist[t[15]]++;
+        hist[t[16]]++, hist[t[17]]++, hist[t[18]]++, hist[t[19]]++;
+        hist[t[20]]++, hist[t[21]]++, hist[t[22]]++, hist[t[23]]++;
+        hist[t[24]]++, hist[t[25]]++, hist[t[26]]++, hist[t[27]]++;
+        hist[t[28]]++, hist[t[29]]++, hist[t[30]]++, hist[t[31]]++;
+
+        r += 24;
+    }
+}
+
 class BenchmarkGroup {
   private:
     std::vector<std::function<void()>> functions;
@@ -307,15 +470,15 @@ void bench_merge(int rounds, int seed) {
     }
 
     BenchmarkGroup group;
-    group.add("merge_base", [&]() {
+    group.add("merge_base", [=]() {
         memset(reg_raw, 0, HLL_REGISTERS);
         merge_base(reg_raw, reg_dense);
     });
-    group.add("merge_avx512_1", [&]() {
+    group.add("merge_avx512_1", [=]() {
         memset(reg_raw, 0, HLL_REGISTERS);
         merge_avx512_1(reg_raw, reg_dense);
     });
-    group.add("merge_avx512_2", [&]() {
+    group.add("merge_avx512_2", [=]() {
         memset(reg_raw, 0, HLL_REGISTERS);
         merge_avx512_2(reg_raw, reg_dense);
     });
@@ -328,7 +491,7 @@ void bench_merge(int rounds, int seed) {
 }
 
 int check_compress(const uint8_t *lhs, const uint8_t *rhs) {
-    for (int i = 0; i < HLL_REGISTERS * HLL_BITS / 8; i++) {
+    for (int i = 0; i < HLL_DENSE_REG_LEN; i++) {
         if (lhs[i] != rhs[i]) {
             return i;
         }
@@ -368,11 +531,78 @@ void bench_compress(int rounds, int seed) {
     }
 
     BenchmarkGroup group;
-    group.add("compress_base", [&]() {
+    group.add("compress_base", [=]() {
         compress_base(reg_dense, reg_raw); //
     });
-    group.add("compress_avx512", [&]() {
+    group.add("compress_avx512", [=]() {
         compress_avx512(reg_dense, reg_raw); //
+    });
+
+    printf("benchmark\n");
+    group.run(rounds);
+    group.summary();
+
+    printf("-----------------------\n");
+}
+
+int check_histogram(const int *lhs, const int *rhs) {
+    for (int i = 0; i < 64; i++) {
+        if (lhs[i] != rhs[i]) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+static int hist1[64];
+static int hist2[64];
+
+void bench_histogram(int rounds, int seed) {
+    printf("------bench_histogram------\n");
+
+    srand(seed);
+
+    uint8_t *reg_dense = buf1 + 64;
+
+    printf("verify\n");
+    for (int r = 0; r < rounds / 10; ++r) {
+        for (int i = 0; i < HLL_DENSE_REG_LEN; i++) {
+            reg_dense[i] = rand();
+        }
+
+        memset(hist1, 0, sizeof(hist1));
+        histogram_base_1(reg_dense, hist1);
+
+        void (*funcs[3])(const uint8_t *, int *) = {
+            histogram_base_2, //
+            histogram_unroll, //
+            histogram_avx2_1, //
+        };
+
+        for (int j = 0; j < 3; ++j) {
+            memset(hist2, 0, sizeof(hist2));
+            funcs[j](reg_dense, hist2);
+            int idx = check_histogram(hist1, hist2);
+            if (idx >= 0) {
+                fprintf(stderr, "error: %d, %d, %d, %d\n", j, idx, hist1[idx],
+                        hist2[idx]);
+                exit(1);
+            }
+        }
+    }
+
+    BenchmarkGroup group;
+    group.add("histogram_base_1", [=]() {
+        histogram_base_1(reg_dense, hist1); //
+    });
+    group.add("histogram_base_2", [=]() {
+        histogram_base_2(reg_dense, hist1); //
+    });
+    group.add("histogram_unroll", [=]() {
+        histogram_unroll(reg_dense, hist1); //
+    });
+    group.add("histogram_avx2_1", [=]() {
+        histogram_avx2_1(reg_dense, hist1); //
     });
 
     printf("benchmark\n");
@@ -398,6 +628,7 @@ int main() {
     printf("rounds: %d\n", rounds);
     printf("seed: %d\n", seed);
 
+    bench_histogram(rounds, seed);
     bench_merge(rounds, seed);
     bench_compress(rounds, seed);
 }
