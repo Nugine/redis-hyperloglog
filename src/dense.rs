@@ -270,12 +270,8 @@ unsafe fn merge_max_avx512(reg_raw: *mut u8, reg_dense: *const u8) {
 
 #[inline(always)]
 unsafe fn compress(reg_dense: *mut u8, reg_raw: *const u8) {
-    if const { HLL_BITS == 6 && HLL_REGISTERS % 64 == 0 }
-        && is_simd_enabled()
-        && is_x86_feature_detected!("avx512f")
-        && is_x86_feature_detected!("avx512bw")
-    {
-        return compress_avx512(reg_dense, reg_raw);
+    if const { HLL_BITS == 6 && HLL_REGISTERS % 64 == 0 } && is_simd_enabled() && is_x86_feature_detected!("avx2") {
+        return compress_avx2(reg_dense, reg_raw);
     }
     compress_scalar(reg_dense, reg_raw);
 }
@@ -288,38 +284,50 @@ unsafe fn compress_scalar(reg_dense: *mut u8, reg_raw: *const u8) {
     }
 }
 
-#[target_feature(enable = "avx512f")]
-#[target_feature(enable = "avx512bw")]
-unsafe fn compress_avx512(reg_dense: *mut u8, reg_raw: *const u8) {
+#[target_feature(enable = "avx2")]
+unsafe fn compress_avx2(reg_dense: *mut u8, reg_raw: *const u8) {
     use core::arch::x86_64::*;
 
-    let indices = _mm512_setr_epi32(
-        0, 3, 6, 9, 12, 15, 18, 21, //
-        24, 27, 30, 33, 36, 39, 42, 45, //
+    let shuffle = _mm256_setr_epi8(
+        0, 1, 2, //
+        4, 5, 6, //
+        8, 9, 10, //
+        12, 13, 14, //
+        -1, -1, -1, -1, //
+        0, 1, 2, //
+        4, 5, 6, //
+        8, 9, 10, //
+        12, 13, 14, //
+        -1, -1, -1, -1 //
     );
 
     let mut r = reg_raw;
     let mut t = reg_dense;
 
-    for _ in 0..HLL_REGISTERS / 64 {
-        let x = _mm512_loadu_si512(r.cast());
+    for _ in 0..HLL_REGISTERS / 32 {
+        let x = _mm256_loadu_si256(r.cast());
 
-        let a1 = _mm512_and_si512(x, _mm512_set1_epi32(0x0000_003f));
-        let a2 = _mm512_and_si512(x, _mm512_set1_epi32(0x0000_3f00));
-        let a3 = _mm512_and_si512(x, _mm512_set1_epi32(0x003f_0000));
-        let a4 = _mm512_and_si512(x, _mm512_set1_epi32(0x3f00_0000));
+        let a1 = _mm256_and_si256(x, _mm256_set1_epi32(0x0000_003f));
+        let a2 = _mm256_and_si256(x, _mm256_set1_epi32(0x0000_3f00));
+        let a3 = _mm256_and_si256(x, _mm256_set1_epi32(0x003f_0000));
+        let a4 = _mm256_and_si256(x, _mm256_set1_epi32(0x3f00_0000));
 
-        let a2 = _mm512_srli_epi32(a2, 2);
-        let a3 = _mm512_srli_epi32(a3, 4);
-        let a4 = _mm512_srli_epi32(a4, 6);
+        let a2 = _mm256_srli_epi32(a2, 2);
+        let a3 = _mm256_srli_epi32(a3, 4);
+        let a4 = _mm256_srli_epi32(a4, 6);
 
-        let y1 = _mm512_or_si512(a1, a2);
-        let y2 = _mm512_or_si512(a3, a4);
-        let y = _mm512_or_si512(y1, y2);
+        let y1 = _mm256_or_si256(a1, a2);
+        let y2 = _mm256_or_si256(a3, a4);
+        let y = _mm256_or_si256(y1, y2);
+        let y = _mm256_shuffle_epi8(y, shuffle);
 
-        _mm512_i32scatter_epi32(t.cast(), indices, y, 1);
+        let low = _mm256_castsi256_si128(y);
+        let high = _mm256_extracti128_si256(y, 1);
 
-        r = r.add(64);
-        t = t.add(48);
+        _mm_storeu_si128(t.cast(), low);
+        _mm_storeu_si128(t.add(12).cast(), high);
+
+        r = r.add(32);
+        t = t.add(24);
     }
 }

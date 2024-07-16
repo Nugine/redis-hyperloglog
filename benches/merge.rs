@@ -4,6 +4,7 @@ use criterion::{black_box, criterion_group, criterion_main, AxisScale, PlotConfi
 use criterion::{BenchmarkId, Criterion};
 
 pub fn bench_merge(c: &mut Criterion) {
+    dbg!(is_x86_feature_detected!("avx2"));
     dbg!(is_x86_feature_detected!("avx512f"));
     dbg!(is_x86_feature_detected!("avx512bw"));
 

@@ -110,22 +110,14 @@ void merge_avx2_1(uint8_t *reg_raw, const uint8_t *reg_dense) {
 
 void merge_avx512_1(uint8_t *reg_raw, const uint8_t *reg_dense) {
     const __m512i shuffle = _mm512_set_epi8( //
-        0x80, 11, 10, 9,                     //
-        0x80, 8, 7, 6,                       //
-        0x80, 5, 4, 3,                       //
-        0x80, 2, 1, 0,                       //
-        0x80, 15, 14, 13,                    //
-        0x80, 12, 11, 10,                    //
-        0x80, 9, 8, 7,                       //
-        0x80, 6, 5, 4,                       //
-        0x80, 11, 10, 9,                     //
-        0x80, 8, 7, 6,                       //
-        0x80, 5, 4, 3,                       //
-        0x80, 2, 1, 0,                       //
-        0x80, 15, 14, 13,                    //
-        0x80, 12, 11, 10,                    //
-        0x80, 9, 8, 7,                       //
-        0x80, 6, 5, 4                        //
+        0x80, 11, 10, 9, 0x80, 8, 7, 6,      //
+        0x80, 5, 4, 3, 0x80, 2, 1, 0,        //
+        0x80, 15, 14, 13, 0x80, 12, 11, 10,  //
+        0x80, 9, 8, 7, 0x80, 6, 5, 4,        //
+        0x80, 11, 10, 9, 0x80, 8, 7, 6,      //
+        0x80, 5, 4, 3, 0x80, 2, 1, 0,        //
+        0x80, 15, 14, 13, 0x80, 12, 11, 10,  //
+        0x80, 9, 8, 7, 0x80, 6, 5, 4         //
     );
 
     const uint8_t *r = reg_dense - 4;
@@ -212,8 +204,55 @@ void compress_base(uint8_t *reg_dense, const uint8_t *reg_raw) {
     }
 }
 
+void compress_avx2_1(uint8_t *reg_dense, const uint8_t *reg_raw) {
+    const __m256i shuffle = _mm256_setr_epi8( //
+        0, 1, 2,                              //
+        4, 5, 6,                              //
+        8, 9, 10,                             //
+        12, 13, 14,                           //
+        0x80, 0x80, 0x80, 0x80,               //
+        0, 1, 2,                              //
+        4, 5, 6,                              //
+        8, 9, 10,                             //
+        12, 13, 14,                           //
+        0x80, 0x80, 0x80, 0x80                //
+    );
+    const uint8_t *r = reg_raw;
+    uint8_t *t = reg_dense;
+
+    for (int i = 0; i < HLL_REGISTERS / 32; ++i) {
+        __m256i x = _mm256_loadu_si256((__m256i *)r);
+
+        __m256i a1, a2, a3, a4;
+        a1 = _mm256_and_si256(x, _mm256_set1_epi32(0x0000003f));
+        a2 = _mm256_and_si256(x, _mm256_set1_epi32(0x00003f00));
+        a3 = _mm256_and_si256(x, _mm256_set1_epi32(0x003f0000));
+        a4 = _mm256_and_si256(x, _mm256_set1_epi32(0x3f000000));
+
+        a2 = _mm256_srli_epi32(a2, 2);
+        a3 = _mm256_srli_epi32(a3, 4);
+        a4 = _mm256_srli_epi32(a4, 6);
+
+        __m256i y1, y2, y;
+        y1 = _mm256_or_si256(a1, a2);
+        y2 = _mm256_or_si256(a3, a4);
+        y = _mm256_or_si256(y1, y2);
+        y = _mm256_shuffle_epi8(y, shuffle);
+
+        __m128i lower, higher;
+        lower = _mm256_castsi256_si128(y);
+        higher = _mm256_extracti128_si256(y, 1);
+
+        _mm_storeu_si128((__m128i *)t, lower);
+        _mm_storeu_si128((__m128i *)(t + 12), higher);
+
+        r += 32;
+        t += 24;
+    }
+}
+
 #ifndef NO_AVX512
-void compress_avx512(uint8_t *reg_dense, const uint8_t *reg_raw) {
+void compress_avx512_1(uint8_t *reg_dense, const uint8_t *reg_raw) {
     const __m512i indices = _mm512_setr_epi32( //
         0, 3, 6, 9, 12, 15, 18, 21,            //
         24, 27, 30, 33, 36, 39, 42, 45         //
@@ -247,6 +286,67 @@ void compress_avx512(uint8_t *reg_dense, const uint8_t *reg_raw) {
     }
 }
 
+void compress_avx512_2(uint8_t *reg_dense, const uint8_t *reg_raw) {
+    const __m512i shuffle = _mm512_set_epi8( //
+        0x80, 0x80, 0x80, 0x80,              //
+        14, 13, 12,                          //
+        10, 9, 8,                            //
+        6, 5, 4,                             //
+        2, 1, 0,                             //
+        0x80, 0x80, 0x80, 0x80,              //
+        14, 13, 12,                          //
+        10, 9, 8,                            //
+        6, 5, 4,                             //
+        2, 1, 0,                             //
+        0x80, 0x80, 0x80, 0x80,              //
+        14, 13, 12,                          //
+        10, 9, 8,                            //
+        6, 5, 4,                             //
+        2, 1, 0,                             //
+        0x80, 0x80, 0x80, 0x80,              //
+        14, 13, 12,                          //
+        10, 9, 8,                            //
+        6, 5, 4,                             //
+        2, 1, 0                              //
+    );
+
+    const uint8_t *r = reg_raw;
+    uint8_t *t = reg_dense;
+
+    for (int i = 0; i < HLL_REGISTERS / 64; ++i) {
+        __m512i x = _mm512_loadu_si512((__m512i *)r);
+
+        __m512i a1, a2, a3, a4;
+        a1 = _mm512_and_si512(x, _mm512_set1_epi32(0x0000003f));
+        a2 = _mm512_and_si512(x, _mm512_set1_epi32(0x00003f00));
+        a3 = _mm512_and_si512(x, _mm512_set1_epi32(0x003f0000));
+        a4 = _mm512_and_si512(x, _mm512_set1_epi32(0x3f000000));
+
+        a2 = _mm512_srli_epi32(a2, 2);
+        a3 = _mm512_srli_epi32(a3, 4);
+        a4 = _mm512_srli_epi32(a4, 6);
+
+        __m512i y1, y2, y;
+        y1 = _mm512_or_si512(a1, a2);
+        y2 = _mm512_or_si512(a3, a4);
+        y = _mm512_or_si512(y1, y2);
+        y = _mm512_shuffle_epi8(y, shuffle);
+
+        __m128i p1, p2, p3, p4;
+        p1 = _mm512_extracti64x2_epi64(y, 0);
+        p2 = _mm512_extracti64x2_epi64(y, 1);
+        p3 = _mm512_extracti64x2_epi64(y, 2);
+        p4 = _mm512_extracti64x2_epi64(y, 3);
+
+        _mm_storeu_si128((__m128i *)t, p1);
+        _mm_storeu_si128((__m128i *)(t + 12), p2);
+        _mm_storeu_si128((__m128i *)(t + 24), p3);
+        _mm_storeu_si128((__m128i *)(t + 36), p4);
+
+        r += 64;
+        t += 48;
+    }
+}
 #endif
 
 #define HLL_DENSE_REG_LEN (HLL_REGISTERS * HLL_BITS / 8)
@@ -1039,13 +1139,16 @@ void bench_compress(int rounds, int seed) {
         compress_base(buf3, reg_raw);
 
         std::vector<void (*)(uint8_t *, const uint8_t *)> funcs{
+            compress_avx2_1, //
 #ifndef NO_AVX512
-            compress_avx512, //
+            compress_avx512_1, //
+            compress_avx512_2, //
 #endif
         };
 
         int num = funcs.size();
         for (int j = 0; j < num; ++j) {
+            memset(buf4, 0, sizeof(buf4));
             funcs[j](buf4, reg_raw);
             int idx = check_compress(buf3, buf4);
             if (idx >= 0) {
@@ -1060,11 +1163,15 @@ void bench_compress(int rounds, int seed) {
     group.add("compress_base", [=]() {
         compress_base(reg_dense, reg_raw); //
     });
-
+    group.add("compress_avx2_1", [=]() {
+        compress_avx2_1(reg_dense, reg_raw); //
+    });
 #ifndef NO_AVX512
-
-    group.add("compress_avx512", [=]() {
-        compress_avx512(reg_dense, reg_raw); //
+    group.add("compress_avx512_1", [=]() {
+        compress_avx512_1(reg_dense, reg_raw); //
+    });
+    group.add("compress_avx512_2", [=]() {
+        compress_avx512_1(reg_dense, reg_raw); //
     });
 #endif
 
