@@ -51,6 +51,10 @@
         _p[_byte + 1] |= _v >> _fb8;                                           \
     } while (0)
 
+#define TARGET_DEFAULT __attribute__((target("default")))
+#define TARGET_AVX2 __attribute__((target("avx2")))
+#define TARGET_AVX512 __attribute__((target("avx512f,avx512bw")))
+
 void merge_base(uint8_t *reg_raw, const uint8_t *reg_dense) {
     uint8_t val;
     for (int i = 0; i < HLL_REGISTERS; i++) {
@@ -197,6 +201,16 @@ void merge_avx512_2(uint8_t *reg_raw, const uint8_t *reg_dense) {
 }
 
 #endif
+
+TARGET_DEFAULT
+void merge_dynamic(uint8_t *reg_raw, const uint8_t *reg_dense) {
+    merge_base(reg_raw, reg_dense);
+}
+
+TARGET_AVX2
+void merge_dynamic(uint8_t *reg_raw, const uint8_t *reg_dense) {
+    merge_avx2_1(reg_raw, reg_dense);
+}
 
 void compress_base(uint8_t *reg_dense, const uint8_t *reg_raw) {
     for (int i = 0; i < HLL_REGISTERS; i++) {
@@ -348,6 +362,16 @@ void compress_avx512_2(uint8_t *reg_dense, const uint8_t *reg_raw) {
     }
 }
 #endif
+
+TARGET_DEFAULT
+void compress_dynamic(uint8_t *reg_dense, const uint8_t *reg_raw) {
+    compress_base(reg_dense, reg_raw);
+}
+
+TARGET_AVX2
+void compress_dynamic(uint8_t *reg_dense, const uint8_t *reg_raw) {
+    compress_avx2_1(reg_dense, reg_raw);
+}
 
 #define HLL_DENSE_REG_LEN (HLL_REGISTERS * HLL_BITS / 8)
 
@@ -1066,6 +1090,7 @@ void bench_merge(int rounds, int seed) {
             merge_avx512_1, //
             merge_avx512_2, //
 #endif
+            merge_dynamic,
         };
 
         int num = funcs.size();
@@ -1105,6 +1130,10 @@ void bench_merge(int rounds, int seed) {
         merge_avx512_2(reg_raw, reg_dense);
     });
 #endif
+    group.add("merge_dynamic", [=]() {
+        memset(reg_raw, 0, HLL_REGISTERS);
+        merge_dynamic(reg_raw, reg_dense);
+    });
 
     printf("benchmark\n");
     group.run(rounds);
@@ -1144,6 +1173,7 @@ void bench_compress(int rounds, int seed) {
             compress_avx512_1, //
             compress_avx512_2, //
 #endif
+            compress_dynamic,
         };
 
         int num = funcs.size();
@@ -1174,6 +1204,9 @@ void bench_compress(int rounds, int seed) {
         compress_avx512_1(reg_dense, reg_raw); //
     });
 #endif
+    group.add("compress_dynamic", [=]() {
+        compress_dynamic(reg_dense, reg_raw); //
+    });
 
     printf("benchmark\n");
     group.run(rounds);
