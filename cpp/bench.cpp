@@ -110,6 +110,49 @@ void merge_avx2_1(uint8_t *reg_raw, const uint8_t *reg_dense) {
     }
 }
 
+void merge_avx2_2(uint8_t *reg_raw, const uint8_t *reg_dense) {
+    uint8_t val;
+    for (int i = 0; i < 32; i++) {
+        HLL_DENSE_GET_REGISTER(val, reg_dense, i);
+        if (val > reg_raw[i]) {
+            reg_raw[i] = val;
+        }
+    }
+
+    const uint8_t *r = reg_dense + 24 - 4;
+    const uint8_t *t = reg_raw + 32;
+
+    for (int i = 1; i < HLL_REGISTERS / 32; ++i) {
+        __m256i x0, x;
+        x0 = _mm256_loadu_si256((__m256i *)r);
+        x = _mm256_shuffle_epi8(x0, avx2_shuffle);
+
+        __m256i a1, a2, a3, a4;
+        a1 = _mm256_and_si256(x, _mm256_set1_epi32(0x0000003f));
+        a2 = _mm256_and_si256(x, _mm256_set1_epi32(0x00000fc0));
+        a3 = _mm256_and_si256(x, _mm256_set1_epi32(0x0003f000));
+        a4 = _mm256_and_si256(x, _mm256_set1_epi32(0x00fc0000));
+
+        a2 = _mm256_slli_epi32(a2, 2);
+        a3 = _mm256_slli_epi32(a3, 4);
+        a4 = _mm256_slli_epi32(a4, 6);
+
+        __m256i y1, y2, y;
+        y1 = _mm256_or_si256(a1, a2);
+        y2 = _mm256_or_si256(a3, a4);
+        y = _mm256_or_si256(y1, y2);
+
+        __m256i z = _mm256_loadu_si256((__m256i *)t);
+
+        z = _mm256_max_epu8(z, y);
+
+        _mm256_storeu_si256((__m256i *)t, z);
+
+        r += 24;
+        t += 32;
+    }
+}
+
 #ifndef NO_AVX512
 
 void merge_avx512_1(uint8_t *reg_raw, const uint8_t *reg_dense) {
@@ -203,13 +246,17 @@ void merge_avx512_2(uint8_t *reg_raw, const uint8_t *reg_dense) {
 #endif
 
 TARGET_DEFAULT
-void merge_dynamic(uint8_t *reg_raw, const uint8_t *reg_dense) {
+static void merge_dynamic_impl(uint8_t *reg_raw, const uint8_t *reg_dense) {
     merge_base(reg_raw, reg_dense);
 }
 
 TARGET_AVX2
-void merge_dynamic(uint8_t *reg_raw, const uint8_t *reg_dense) {
+static void merge_dynamic_impl(uint8_t *reg_raw, const uint8_t *reg_dense) {
     merge_avx2_1(reg_raw, reg_dense);
+}
+
+void merge_dynamic(uint8_t *reg_raw, const uint8_t *reg_dense) {
+    merge_dynamic_impl(reg_raw, reg_dense);
 }
 
 void compress_base(uint8_t *reg_dense, const uint8_t *reg_raw) {
@@ -364,13 +411,17 @@ void compress_avx512_2(uint8_t *reg_dense, const uint8_t *reg_raw) {
 #endif
 
 TARGET_DEFAULT
-void compress_dynamic(uint8_t *reg_dense, const uint8_t *reg_raw) {
+static void compress_dynamic_impl(uint8_t *reg_dense, const uint8_t *reg_raw) {
     compress_base(reg_dense, reg_raw);
 }
 
 TARGET_AVX2
-void compress_dynamic(uint8_t *reg_dense, const uint8_t *reg_raw) {
+static void compress_dynamic_impl(uint8_t *reg_dense, const uint8_t *reg_raw) {
     compress_avx2_1(reg_dense, reg_raw);
+}
+
+void compress_dynamic(uint8_t *reg_dense, const uint8_t *reg_raw) {
+    compress_dynamic_impl(reg_dense, reg_raw);
 }
 
 #define HLL_DENSE_REG_LEN (HLL_REGISTERS * HLL_BITS / 8)
@@ -1086,6 +1137,7 @@ void bench_merge(int rounds, int seed) {
 
         std::vector<void (*)(uint8_t *, const uint8_t *)> funcs{
             merge_avx2_1, //
+            merge_avx2_2, //
 #ifndef NO_AVX512
             merge_avx512_1, //
             merge_avx512_2, //
@@ -1119,6 +1171,10 @@ void bench_merge(int rounds, int seed) {
     group.add("merge_avx2_1", [=]() {
         memset(reg_raw, 0, HLL_REGISTERS);
         merge_avx2_1(reg_raw, reg_dense);
+    });
+    group.add("merge_avx2_2", [=]() {
+        memset(reg_raw, 0, HLL_REGISTERS);
+        merge_avx2_2(reg_raw, reg_dense);
     });
 #ifndef NO_AVX512
     group.add("merge_avx512_1", [=]() {
