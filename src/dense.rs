@@ -298,7 +298,7 @@ unsafe fn compress_avx2(reg_dense: *mut u8, reg_raw: *const u8) {
         4, 5, 6, //
         8, 9, 10, //
         12, 13, 14, //
-        -1, -1, -1, -1 //
+        -1, -1, -1, -1, //
     );
 
     let mut r = reg_raw;
