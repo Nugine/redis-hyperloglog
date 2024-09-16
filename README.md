@@ -12,6 +12,10 @@ PFCOUNT-avx2     69802.99         2.85844         2.75100         5.53500       
 PFMERGE-scalar    9445.56        21.17554        20.09500        38.91100        41.21500       590.35
 PFMERGE-avx2    120642.02         1.65367         1.59100         3.21500         5.11900      7540.13
 ------------------------------------------------------------------------------------------------------
+
+CPU:    13th Gen Intel® Core™ i9-13900H × 20
+Memory: 32.0 GiB
+OS:     Ubuntu 22.04.5 LTS
 ```
 
 This repository contains our experiment code, including the SIMD algorithms and benchmarks.
