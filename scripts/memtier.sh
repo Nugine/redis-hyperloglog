@@ -7,7 +7,9 @@ memtier_benchmark --random-data --command="pfadd key3 __data__" -n 10000 --hdr-f
 
 memtier_benchmark --command="pfcount key1" -n 10000 --hdr-file-prefix "key1_count" >> stdout.log
 
-memtier_benchmark --command="pfmerge keyall key1 key2 key3" -n 10000 --hdr-file-prefix "key_merge" >> stdout.log
+memtier_benchmark --command="pfcount key1 key2 key3" -n 10000 --hdr-file-prefix "keys_count" >> stdout.log
+
+memtier_benchmark --command="pfmerge keyall key1 key2 key3" -n 10000 --hdr-file-prefix "keys_merge" >> stdout.log
 
 # cleanup
 redis-cli del key1 key2 key3 keyall
