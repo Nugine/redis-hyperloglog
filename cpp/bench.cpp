@@ -155,17 +155,17 @@ void merge_avx2_2(uint8_t *reg_raw, const uint8_t *reg_dense) {
 
 void merge_avx2_3(uint8_t *reg_raw, const uint8_t *reg_dense) {
     uint8_t val;
-    for (int i = 0; i < 32; i++) {
+    for (int i = 0; i < 8; i++) {
         HLL_DENSE_GET_REGISTER(val, reg_dense, i);
         if (val > reg_raw[i]) {
             reg_raw[i] = val;
         }
     }
 
-    const uint8_t *r = reg_dense + 24 - 4;
-    uint8_t *t = reg_raw + 32;
+    const uint8_t *r = reg_dense + 6 - 4;
+    uint8_t *t = reg_raw + 8;
 
-    for (int i = 0; i < HLL_REGISTERS / 32 - 2; ++i) {
+    for (int i = 0; i < HLL_REGISTERS / 32 - 1; ++i) {
         __m256i x0, x;
         x0 = _mm256_loadu_si256((__m256i *)r);
         x = _mm256_shuffle_epi8(x0, avx2_shuffle);
@@ -195,7 +195,7 @@ void merge_avx2_3(uint8_t *reg_raw, const uint8_t *reg_dense) {
         t += 32;
     }
 
-    for (int i = HLL_REGISTERS - 32; i < HLL_REGISTERS; i++) {
+    for (int i = HLL_REGISTERS - 24; i < HLL_REGISTERS; i++) {
         HLL_DENSE_GET_REGISTER(val, reg_dense, i);
         if (val > reg_raw[i]) {
             reg_raw[i] = val;
