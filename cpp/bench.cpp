@@ -41,8 +41,8 @@
 #define HLL_DENSE_SET_REGISTER(p, regnum, val)                                 \
     do {                                                                       \
         uint8_t *_p = (uint8_t *)p;                                            \
-        unsigned long _byte = (regnum) * HLL_BITS / 8;                         \
-        unsigned long _fb = (regnum) * HLL_BITS & 7;                           \
+        unsigned long _byte = (regnum)*HLL_BITS / 8;                           \
+        unsigned long _fb = (regnum)*HLL_BITS & 7;                             \
         unsigned long _fb8 = 8 - _fb;                                          \
         unsigned long _v = (val);                                              \
         _p[_byte] &= ~(HLL_REGISTER_MAX << _fb);                               \
